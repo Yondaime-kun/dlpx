@@ -139,22 +139,29 @@ def resolve_jable_stream_url(url: str) -> Optional[str]:
     return None
 
 
-def search_youtube(query: str, max_results: int = 10, cfg: Optional[Dict[str, Any]] = None) -> List[SearchResult]:
-    """Search YouTube using yt-dlp's built-in ytsearch extractor."""
+def search_youtube(query: str, max_results: int = 10, page: int = 1, cfg: Optional[Dict[str, Any]] = None) -> List[SearchResult]:
+    """Search YouTube using yt-dlp's built-in ytsearch extractor.
+
+    Pagination is achieved by fetching ``page * max_results`` entries and
+    slicing to the requested page window.
+    """
     if not shutil.which("yt-dlp"):
         raise RuntimeError("yt-dlp not found")
+
+    total = page * max_results
 
     from dlpx.yt_dlp import yt_base
     base = yt_base(cfg or {})
     cmd = base + [
         "-J", "--no-warnings", "--flat-playlist",
-        f"ytsearch{max_results}:{query}",
+        f"ytsearch{total}:{query}",
     ]
     r = run_cmd(cmd, check=True)
     data = json.loads(r.stdout)
 
+    start = (page - 1) * max_results
     results: List[SearchResult] = []
-    for entry in data.get("entries", []):
+    for entry in data.get("entries", [])[start:start + max_results]:
         vid_url = entry.get("url") or entry.get("webpage_url", "")
         if vid_url and not vid_url.startswith("http"):
             vid_url = f"https://www.youtube.com/watch?v={vid_url}"
@@ -181,13 +188,14 @@ def search_youtube(query: str, max_results: int = 10, cfg: Optional[Dict[str, An
     return results
 
 
-def display_search_results(results: List[SearchResult], title: str = "Search Results"):
+def display_search_results(results: List[SearchResult], title: str = "Search Results", page: int = 1):
     """Display search results in a rich table."""
     if not results:
         console.print("[yellow]No results found.[/yellow]")
         return
 
-    t = Table(title=title)
+    label = f"{title} (page {page})"
+    t = Table(title=label)
     t.add_column("#", style="cyan", width=4)
     t.add_column("Title", style="bold")
     t.add_column("Duration", width=10)
@@ -201,7 +209,7 @@ def display_search_results(results: List[SearchResult], title: str = "Search Res
 
 
 def interactive_search(cfg: Optional[Dict[str, Any]] = None):
-    """Run an interactive search session."""
+    """Run an interactive search session with pagination."""
     while True:
         query = Prompt.ask("\n[bold]Search query[/bold] (q=quit)").strip()
         if not query or query.lower() in {"q", "quit", "exit"}:
@@ -210,51 +218,77 @@ def interactive_search(cfg: Optional[Dict[str, Any]] = None):
         console.print(f"\n[bold]Search provider:[/bold]")
         console.print("1) jable.tv\n2) YouTube (via yt-dlp)")
         provider = Prompt.ask("Choose provider", default="1").strip()
-
-        with console.status("[bold blue]Searching...[/bold blue]"):
-            try:
-                if provider == "1":
-                    results = search_jable(query)
-                elif provider == "2":
-                    results = search_youtube(query, cfg=cfg)
-                else:
-                    console.print("[red]Invalid provider[/red]")
-                    continue
-            except Exception as e:
-                console.print(f"[red]Search failed:[/red] {e}")
-                continue
-
-        display_search_results(results, f"Results for '{query}'")
-
-        if not results:
+        if provider not in {"1", "2"}:
+            console.print("[red]Invalid provider[/red]")
             continue
 
-        while True:
-            console.print("\n1) Open result URL\n2) Copy URL\n3) New search\n4) Back")
-            action = Prompt.ask("Action", default="3").strip()
-
-            if action == "1":
-                idx = Prompt.ask("Result #", default="1").strip()
-                if idx.isdigit() and 1 <= int(idx) <= len(results):
-                    url = results[int(idx) - 1].url
-                    console.print(f"[green]URL:[/green] {url}")
-                    return url
-                else:
-                    console.print("[red]Invalid number[/red]")
-            elif action == "2":
-                idx = Prompt.ask("Result #", default="1").strip()
-                if idx.isdigit() and 1 <= int(idx) <= len(results):
-                    url = results[int(idx) - 1].url
-                    from dlpx.utils import copy_to_clipboard
-                    if copy_to_clipboard(url):
-                        console.print("[green]Copied[/green]")
+        page = 1
+        new_search = False
+        while not new_search:
+            with console.status(f"[bold blue]Searching (page {page})...[/bold blue]"):
+                try:
+                    if provider == "1":
+                        results = search_jable(query, page=page)
                     else:
-                        console.print(f"[green]URL:[/green] {url}")
-                else:
-                    console.print("[red]Invalid number[/red]")
-            elif action == "3":
+                        results = search_youtube(query, page=page, cfg=cfg)
+                except Exception as e:
+                    console.print(f"[red]Search failed:[/red] {e}")
+                    break
+
+            display_search_results(results, f"Results for '{query}'", page=page)
+
+            if not results:
+                if page > 1:
+                    console.print("[yellow]No more results.[/yellow]")
                 break
-            elif action == "4":
-                return None
+
+            while True:
+                opts = [
+                    "1) Open result URL",
+                    "2) Copy URL",
+                    "3) Next page",
+                ]
+                if page > 1:
+                    opts.append("4) Previous page")
+                    opts.append("5) New search")
+                    opts.append("6) Back")
+                else:
+                    opts.append("4) New search")
+                    opts.append("5) Back")
+                console.print("\n" + "\n".join(opts))
+                action = Prompt.ask("Action", default="1").strip()
+
+                if action == "1":
+                    idx = Prompt.ask("Result #", default="1").strip()
+                    if idx.isdigit() and 1 <= int(idx) <= len(results):
+                        url = results[int(idx) - 1].url
+                        console.print(f"[green]URL:[/green] {url}")
+                        return url
+                    else:
+                        console.print("[red]Invalid number[/red]")
+                elif action == "2":
+                    idx = Prompt.ask("Result #", default="1").strip()
+                    if idx.isdigit() and 1 <= int(idx) <= len(results):
+                        url = results[int(idx) - 1].url
+                        from dlpx.utils import copy_to_clipboard
+                        if copy_to_clipboard(url):
+                            console.print("[green]Copied[/green]")
+                        else:
+                            console.print(f"[green]URL:[/green] {url}")
+                    else:
+                        console.print("[red]Invalid number[/red]")
+                elif action == "3":
+                    page += 1
+                    break
+                elif action == "4" and page > 1:
+                    page -= 1
+                    break
+                elif (action == "4" and page == 1) or (action == "5" and page > 1):
+                    new_search = True
+                    break
+                elif (action == "5" and page == 1) or (action == "6" and page > 1):
+                    return None
+                else:
+                    console.print("[red]Invalid[/red]")
 
     return None

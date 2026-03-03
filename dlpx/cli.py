@@ -121,11 +121,11 @@ def main():
             if args.search_provider == "jable":
                 results = search_jable(args.search, page=args.search_page)
             elif args.search_provider == "youtube":
-                results = search_youtube(args.search, cfg=cfg)
+                results = search_youtube(args.search, page=args.search_page, cfg=cfg)
             else:
                 console.print(f"[red]Unknown provider: {args.search_provider}[/red]")
                 return
-            display_search_results(results, f"Results for '{args.search}'")
+            display_search_results(results, f"Results for '{args.search}'", page=args.search_page)
             return
 
         if args.batch:
