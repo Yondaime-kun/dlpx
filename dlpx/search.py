@@ -107,7 +107,9 @@ def search_jable(query: str, page: int = 1) -> List[SearchResult]:
 
 def is_jable_url(url: str) -> bool:
     """Check whether a URL belongs to jable.tv."""
-    return "jable.tv" in url.lower()
+    from urllib.parse import urlparse
+    netloc = urlparse(url).netloc.lower()
+    return netloc == "jable.tv" or netloc.endswith(".jable.tv")
 
 
 def resolve_jable_stream_url(url: str) -> Optional[str]:

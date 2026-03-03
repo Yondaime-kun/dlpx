@@ -145,7 +145,11 @@ def main():
         target_url = args.url
         if target_url and is_jable_url(target_url):
             console.print("[bold blue]Resolving jable.tv stream URL...[/bold blue]")
-            stream = resolve_jable_stream_url(target_url)
+            try:
+                stream = resolve_jable_stream_url(target_url)
+            except Exception as e:
+                console.print(f"[red]Failed to resolve jable.tv stream:[/red] {e}")
+                return
             if not stream:
                 console.print("[red]Could not extract stream URL from jable.tv page[/red]")
                 return
