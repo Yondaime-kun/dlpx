@@ -80,12 +80,12 @@ To build locally:
 ```bash
 pip install flet
 # Fat APK (all architectures)
-flet build apk --android-min-sdk-version 21 --product "DLPX" --org "com.dlpx" --project "dlpx"
+flet build apk --product "DLPX" --org "com.dlpx" --project "dlpx"
 
 # Per-architecture APKs
-flet build apk --android-min-sdk-version 21 --android-arch arm64-v8a --product "DLPX" --org "com.dlpx" --project "dlpx"
-flet build apk --android-min-sdk-version 21 --android-arch armeabi-v7a --product "DLPX" --org "com.dlpx" --project "dlpx"
-flet build apk --android-min-sdk-version 21 --android-arch x86_64 --product "DLPX" --org "com.dlpx" --project "dlpx"
+flet build apk --arch arm64-v8a --product "DLPX" --org "com.dlpx" --project "dlpx"
+flet build apk --arch armeabi-v7a --product "DLPX" --org "com.dlpx" --project "dlpx"
+flet build apk --arch x86_64 --product "DLPX" --org "com.dlpx" --project "dlpx"
 ```
 
 Built APKs are available as GitHub Actions artifacts and as release assets for tagged versions.

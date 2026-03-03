@@ -60,17 +60,20 @@ jobs:
       - name: Build APK (${{ matrix.arch }})
         run: |
           flet build apk \
-            --android-min-sdk-version 21 \
-            --android-arch ${{ matrix.arch }} \
+            --arch ${{ matrix.arch }} \
             --product "DLPX" \
             --org "com.dlpx" \
             --project "dlpx" \
-            --android-permissions "android.permission.INTERNET,android.permission.WRITE_EXTERNAL_STORAGE,android.permission.READ_EXTERNAL_STORAGE"
+            --android-permissions \
+              android.permission.INTERNET=True \
+              android.permission.WRITE_EXTERNAL_STORAGE=True \
+              android.permission.READ_EXTERNAL_STORAGE=True \
+            --yes
 
       - name: Rename APK
         run: |
           mkdir -p dist
-          cp build/apk/app-release.apk dist/dlpx-${{ matrix.arch }}.apk
+          cp build/apk/*.apk dist/dlpx-${{ matrix.arch }}.apk
 
       - uses: actions/upload-artifact@v4
         with:
@@ -104,16 +107,19 @@ jobs:
       - name: Build fat APK (all architectures)
         run: |
           flet build apk \
-            --android-min-sdk-version 21 \
             --product "DLPX" \
             --org "com.dlpx" \
             --project "dlpx" \
-            --android-permissions "android.permission.INTERNET,android.permission.WRITE_EXTERNAL_STORAGE,android.permission.READ_EXTERNAL_STORAGE"
+            --android-permissions \
+              android.permission.INTERNET=True \
+              android.permission.WRITE_EXTERNAL_STORAGE=True \
+              android.permission.READ_EXTERNAL_STORAGE=True \
+            --yes
 
       - name: Rename APK
         run: |
           mkdir -p dist
-          cp build/apk/app-release.apk dist/dlpx-universal.apk
+          cp build/apk/*.apk dist/dlpx-universal.apk
 
       - uses: actions/upload-artifact@v4
         with:
