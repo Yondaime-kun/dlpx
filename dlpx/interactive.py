@@ -12,7 +12,7 @@ from rich.panel import Panel
 from dlpx.utils import (
     sanitize_filename, copy_to_clipboard, shell_join, run_live,
 )
-from dlpx.doctor import detect_engine, open_in_1dm
+from dlpx.doctor import detect_engine, open_in_1dm, open_stream, STREAM_PLAYERS
 from dlpx.yt_dlp import (
     yt_info, yt_parse, yt_filter, yt_smart_pick, yt_table, yt_download_cmd,
 )
@@ -24,6 +24,56 @@ from dlpx.history import ask_url_with_history
 from dlpx.search import interactive_search, is_jable_url, resolve_jable_stream_url
 
 console = Console()
+
+
+def _ask_stream_player() -> str:
+    """Prompt user to choose a streaming player."""
+    players = list(STREAM_PLAYERS.keys())
+    console.print("[bold]Stream player:[/bold]")
+    for i, p in enumerate(players, 1):
+        console.print(f"  {i}) {p}")
+    pick = Prompt.ask("Choose player", default="1").strip()
+    if pick.isdigit() and 1 <= int(pick) <= len(players):
+        return players[int(pick) - 1]
+    return "chooser"
+
+
+def interactive_direct_stream(stream_url: str, cfg: Dict[str, Any]):
+    """Menu for a direct stream URL (e.g. jable.tv m3u8) — no yt-dlp metadata needed."""
+    console.print(Panel.fit(
+        f"[bold]Direct stream URL[/bold]\n{stream_url}",
+        title="Stream Info"
+    ))
+
+    while True:
+        console.print(
+            "\n1) Stream in player\n2) Open in 1DM+\n3) Copy URL\n4) Download via yt-dlp\n5) Back"
+        )
+        a = Prompt.ask("Action", default="1").strip()
+        if a == "1":
+            player = _ask_stream_player()
+            ok, msg = open_stream(stream_url, player)
+            console.print(f"[green]{msg}[/green]" if ok else f"[red]{msg}[/red]")
+        elif a == "2":
+            ok, msg = open_in_1dm(stream_url)
+            console.print(f"[green]{msg}[/green]" if ok else f"[red]{msg}[/red]")
+        elif a == "3":
+            if copy_to_clipboard(stream_url):
+                console.print("[green]Copied[/green]")
+            else:
+                console.print(stream_url)
+        elif a == "4":
+            from dlpx.yt_dlp import yt_base
+            cmd = yt_base(cfg)
+            if cfg.get("_runtime_output_dir"):
+                cmd += ["-P", str(cfg["_runtime_output_dir"])]
+            cmd += ["-o", "%(title)s.%(ext)s", stream_url]
+            console.print(shell_join(cmd))
+            run_live(cmd)
+        elif a == "5":
+            break
+        else:
+            console.print("[red]Invalid[/red]")
 
 
 def interactive_yt(url: str, cfg: Dict[str, Any], show_all=False, audio_only=False):
@@ -65,7 +115,7 @@ def interactive_yt(url: str, cfg: Dict[str, Any], show_all=False, audio_only=Fal
         chosen = smart or fs[0]
 
     while True:
-        console.print("\n1) Open in 1DM+\n2) Copy URL\n3) Show command\n4) Download\n5) Back")
+        console.print("\n1) Open in 1DM+\n2) Copy URL\n3) Show command\n4) Download\n5) Stream in player\n6) Back")
         a = Prompt.ask("Action", default="1").strip()
         if a == "1":
             ok, msg = open_in_1dm(chosen.direct_url)
@@ -83,6 +133,10 @@ def interactive_yt(url: str, cfg: Dict[str, Any], show_all=False, audio_only=Fal
             console.print(shell_join(cmd))
             run_live(cmd)
         elif a == "5":
+            player = _ask_stream_player()
+            ok, msg = open_stream(chosen.direct_url, player)
+            console.print(f"[green]{msg}[/green]" if ok else f"[red]{msg}[/red]")
+        elif a == "6":
             break
         else:
             console.print("[red]Invalid[/red]")
@@ -193,7 +247,8 @@ def process_url_interactive(url: str, cfg: Dict[str, Any], forced_engine: Option
             console.print("[red]Could not extract stream URL from jable.tv page[/red]")
             return
         console.print(f"[green]Stream URL:[/green] {stream}")
-        url = stream
+        interactive_direct_stream(stream, cfg)
+        return
 
     engine = detect_engine(url, forced_engine, cfg)
     if engine == "gallery-dl":
@@ -204,14 +259,14 @@ def process_url_interactive(url: str, cfg: Dict[str, Any], forced_engine: Option
 
 def interactive_main_loop(cfg: Dict[str, Any], forced_engine: Optional[str]):
     while True:
-        url = ask_url_with_history("Enter URL (arrow up/down history, q=quit, /search=search)")
+        url = ask_url_with_history("Enter URL (arrow ↑↓ history, q=quit, s=search)")
         if not url:
             console.print("[yellow]Empty input[/yellow]")
             continue
         if url.lower() in {"q", "quit", "exit", "/q"}:
             break
 
-        if url.lower() in {"/search", "search"}:
+        if url.lower() in {"s", "/s", "/search", "search"}:
             result_url = interactive_search(cfg=cfg)
             if result_url:
                 process_url_interactive(result_url, cfg, forced_engine)

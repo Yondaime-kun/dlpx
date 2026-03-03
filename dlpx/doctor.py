@@ -26,20 +26,63 @@ def detect_engine(url: str, forced: Optional[str], cfg: Dict[str, Any]) -> str:
     return "yt-dlp"
 
 
+STREAM_PLAYERS = {
+    "vlc": "org.videolan.vlc",
+    "mx": "com.mxtech.videoplayer.ad",
+    "mx-pro": "com.mxtech.videoplayer.pro",
+    "mpv": "is.xyz.mpv",
+    "kodi": "org.xbmc.kodi",
+    "chooser": None,
+}
+
+
+def _open_via_intent(url: str, package: Optional[str] = None) -> Tuple[bool, str]:
+    """Open a URL via Android intent, optionally targeting a specific package."""
+    if not shutil.which("am"):
+        return False, "am not found"
+    cmd = ["am", "start", "-a", "android.intent.action.VIEW", "-d", url]
+    if package:
+        cmd += ["-p", package]
+    r = run_cmd(cmd)
+    if r.returncode == 0:
+        return True, f"Opened via {package or 'chooser'}"
+    return False, f"Failed to open via {package or 'chooser'}"
+
+
 def open_in_1dm(url: str) -> Tuple[bool, str]:
     if shutil.which("am"):
         for pkg in ["idm.internet.download.manager.plus", "idm.internet.download.manager"]:
-            r = run_cmd(["am", "start", "-a", "android.intent.action.VIEW", "-d", url, "-p", pkg])
-            if r.returncode == 0:
-                return True, f"Opened via {pkg}"
-        r = run_cmd(["am", "start", "-a", "android.intent.action.VIEW", "-d", url])
-        if r.returncode == 0:
-            return True, "Opened via chooser"
+            ok, msg = _open_via_intent(url, pkg)
+            if ok:
+                return True, msg
+        ok, msg = _open_via_intent(url)
+        if ok:
+            return True, msg
     if shutil.which("termux-open-url"):
         r = run_cmd(["termux-open-url", url])
         if r.returncode == 0:
             return True, "Opened via termux-open-url"
     return False, "Failed to open URL"
+
+
+def open_stream(url: str, player: str = "chooser") -> Tuple[bool, str]:
+    """Open a URL in an external streaming player via Android intent."""
+    pkg = STREAM_PLAYERS.get(player)
+    if player != "chooser" and pkg is None:
+        return False, f"Unknown player: {player}"
+    ok, msg = _open_via_intent(url, pkg)
+    if ok:
+        return True, msg
+    # fallback to chooser
+    if player != "chooser":
+        ok, msg = _open_via_intent(url)
+        if ok:
+            return True, msg
+    if shutil.which("termux-open-url"):
+        r = run_cmd(["termux-open-url", url])
+        if r.returncode == 0:
+            return True, "Opened via termux-open-url"
+    return False, "Failed to open stream"
 
 
 def get_version(cmd: list) -> str:

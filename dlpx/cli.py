@@ -13,7 +13,7 @@ from dlpx.config import (
 )
 from dlpx.install import install_launcher, uninstall_launcher
 from dlpx.history import setup_readline_history, save_readline_history
-from dlpx.doctor import doctor, detect_engine
+from dlpx.doctor import doctor, detect_engine, open_stream, STREAM_PLAYERS
 from dlpx.yt_dlp import yt_info, yt_parse, yt_smart_pick, yt_download_cmd
 from dlpx.gallery_dl import gallery_list_keys, gallery_download_cmd
 from dlpx.interactive import (
@@ -50,6 +50,9 @@ def build_parser():
 
     # actions
     p.add_argument("--download", action="store_true", help="Download mode")
+    p.add_argument("--stream", nargs="?", const="chooser",
+                   choices=list(STREAM_PLAYERS.keys()),
+                   help="Stream in external player (vlc, mx, mpv, kodi, chooser)")
     p.add_argument("--list-keys", action="store_true", help="gallery-dl -K for URL")
 
     # search
@@ -143,7 +146,8 @@ def main():
 
         # Resolve jable.tv URLs to HLS stream URLs (yt-dlp can't handle jable.tv directly)
         target_url = args.url
-        if target_url and is_jable_url(target_url):
+        is_jable = target_url and is_jable_url(target_url)
+        if is_jable:
             console.print("[bold blue]Resolving jable.tv stream URL...[/bold blue]")
             try:
                 stream = resolve_jable_stream_url(target_url)
@@ -156,23 +160,50 @@ def main():
             console.print(f"[green]Stream URL:[/green] {stream}")
             target_url = stream
 
-        if target_url and args.download:
-            engine = detect_engine(target_url, forced_engine, cfg)
-            if engine == "yt-dlp":
+        # --stream: open URL in external player directly
+        if target_url and args.stream:
+            if is_jable:
+                # Already resolved to stream URL, open directly
+                ok, msg = open_stream(target_url, args.stream)
+            else:
+                # For non-jable URLs, try to resolve via yt-dlp first
                 info = yt_info(target_url, cfg)
                 formats = yt_parse(info)
                 chosen = yt_smart_pick(formats, cfg, audio_only=False)
                 if not chosen:
-                    console.print("[red]No suitable yt format[/red]")
+                    console.print("[red]No suitable format for streaming[/red]")
                     return
-                title = sanitize_filename(info.get("title", "video"))
-                cmd = yt_download_cmd(target_url, cfg, chosen.format_id, f"{title}.%(ext)s")
+                ok, msg = open_stream(chosen.direct_url, args.stream)
+            console.print(f"[green]{msg}[/green]" if ok else f"[red]{msg}[/red]")
+            return
+
+        if target_url and args.download:
+            if is_jable:
+                # Direct download via yt-dlp without metadata fetch
+                from dlpx.yt_dlp import yt_base
+                cmd = yt_base(cfg)
+                if cfg.get("_runtime_output_dir"):
+                    cmd += ["-P", str(cfg["_runtime_output_dir"])]
+                cmd += ["-o", "%(title)s.%(ext)s", target_url]
                 console.print(shell_join(cmd))
                 run_live(cmd)
             else:
-                cmd = gallery_download_cmd(target_url, cfg, None)
-                console.print(shell_join(cmd))
-                run_live(cmd)
+                engine = detect_engine(target_url, forced_engine, cfg)
+                if engine == "yt-dlp":
+                    info = yt_info(target_url, cfg)
+                    formats = yt_parse(info)
+                    chosen = yt_smart_pick(formats, cfg, audio_only=False)
+                    if not chosen:
+                        console.print("[red]No suitable yt format[/red]")
+                        return
+                    title = sanitize_filename(info.get("title", "video"))
+                    cmd = yt_download_cmd(target_url, cfg, chosen.format_id, f"{title}.%(ext)s")
+                    console.print(shell_join(cmd))
+                    run_live(cmd)
+                else:
+                    cmd = gallery_download_cmd(target_url, cfg, None)
+                    console.print(shell_join(cmd))
+                    run_live(cmd)
             return
 
         if target_url:
