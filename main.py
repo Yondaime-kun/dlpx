@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """DLPX – Universal media downloader (Flet mobile app)."""
 
+import io
+import logging
 import os
 import re
+import sys
 import threading
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional
@@ -12,12 +16,47 @@ from urllib.parse import quote_plus
 import flet as ft
 import requests
 
+# ── Debug logging ─────────────────────────────────────
+
+_log_buffer = io.StringIO()
+_log_handlers: list = [
+    logging.StreamHandler(),
+    logging.StreamHandler(_log_buffer),
+]
+
+try:
+    _log_dir = os.environ.get("FLET_APP_STORAGE_DATA") or os.getcwd()
+    _log_file_path = os.path.join(_log_dir, "dlpx_debug.log")
+    _log_handlers.append(logging.FileHandler(_log_file_path, mode="w"))
+except Exception:
+    _log_file_path = None
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=_log_handlers,
+)
+logger = logging.getLogger("dlpx")
+logger.info("DLPX starting up")
+logger.info("Platform: %s", os.environ.get("FLET_PLATFORM", "desktop"))
+logger.info("Python: %s", sys.version)
+logger.info("Log file: %s", _log_file_path or "memory only")
+
 try:
     import yt_dlp as yt_dlp_lib
 
     HAS_YT_DLP = True
-except ImportError:
+    _ytdlp_ver = "unknown"
+    try:
+        import yt_dlp.version
+        _ytdlp_ver = yt_dlp.version.__version__
+    except Exception:
+        pass
+    logger.info("yt-dlp loaded: %s", _ytdlp_ver)
+except Exception:
     HAS_YT_DLP = False
+    yt_dlp_lib = None
+    logger.warning("yt-dlp not available: %s", traceback.format_exc())
 
 
 # ── Data models ───────────────────────────────────────
@@ -226,6 +265,46 @@ def search_jable_api(query: str, page: int = 1) -> List[SearchResult]:
 
 
 def main(page: ft.Page):
+    """Entry point – wraps _build_ui with error handling."""
+    logger.info("main() called – building UI")
+    try:
+        _build_ui(page)
+        logger.info("UI built successfully")
+    except Exception:
+        # Fallback: show error on screen so user can report it
+        err = traceback.format_exc()
+        logger.critical("UI build failed:\n%s", err)
+        page.controls.clear()
+        page.add(
+            ft.SafeArea(
+                ft.Column(
+                    [
+                        ft.Text("DLPX – startup error", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.RED),
+                        ft.Text("The app failed to build its UI. Details below:", size=14),
+                        ft.TextField(
+                            value=err,
+                            multiline=True,
+                            read_only=True,
+                            min_lines=12,
+                            text_size=11,
+                        ),
+                        ft.Text("Full log:", size=14, weight=ft.FontWeight.BOLD),
+                        ft.TextField(
+                            value=_log_buffer.getvalue(),
+                            multiline=True,
+                            read_only=True,
+                            min_lines=12,
+                            text_size=11,
+                        ),
+                    ],
+                    scroll=ft.ScrollMode.AUTO,
+                    spacing=8,
+                ),
+            )
+        )
+
+
+def _build_ui(page: ft.Page):
     page.title = "DLPX"
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = 0
@@ -710,12 +789,33 @@ def main(page: ft.Page):
     # ══════════════════════════════════════════════════
     # SETTINGS
     # ══════════════════════════════════════════════════
+    _default_dl_dir = str(Path.home() / "Downloads")
+    try:
+        if os.environ.get("FLET_PLATFORM") == "android":
+            _default_dl_dir = "/storage/emulated/0/Download"
+    except Exception:
+        pass
+    logger.info("Default download dir: %s", _default_dl_dir)
+
     settings_output = ft.TextField(
         label="Output Directory",
-        value=str(Path.home() / "Downloads"),
+        value=_default_dl_dir,
         border_radius=12,
         prefix_icon=ft.Icons.FOLDER,
     )
+
+    log_field = ft.TextField(
+        value=_log_buffer.getvalue(),
+        multiline=True,
+        read_only=True,
+        min_lines=10,
+        text_size=11,
+        border_radius=12,
+    )
+
+    def _refresh_log():
+        log_field.value = _log_buffer.getvalue()
+        page.update()
 
     settings_view = ft.Container(
         ft.Column(
@@ -744,6 +844,23 @@ def main(page: ft.Page):
                                 size=13,
                                 color=ft.Colors.GREEN if HAS_YT_DLP else ft.Colors.RED,
                             ),
+                            ft.Text(
+                                f"Platform: {os.environ.get('FLET_PLATFORM', 'desktop')}",
+                                size=13,
+                            ),
+                            ft.Divider(),
+                            ft.Row(
+                                [
+                                    ft.Text("Debug Log", size=18, weight=ft.FontWeight.BOLD),
+                                    ft.IconButton(
+                                        ft.Icons.REFRESH,
+                                        tooltip="Refresh log",
+                                        on_click=lambda e: _refresh_log(),
+                                    ),
+                                ],
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            ),
+                            log_field,
                         ],
                         spacing=16,
                     ),
@@ -766,6 +883,8 @@ def main(page: ft.Page):
         body.content = views[idx]
         if idx == 2:
             refresh_downloads()
+        if idx == 3:
+            _refresh_log()
         page.update()
 
     nav_bar = ft.NavigationBar(
@@ -783,5 +902,10 @@ def main(page: ft.Page):
     refresh_downloads()
 
 
-if __name__ == "__main__":
-    ft.app(main)
+# Run the app when executed directly or when loaded by the Flet embedded runtime.
+# On Android/iOS, serious_python may not set __name__ to "__main__", so we also
+# check for the FLET_PLATFORM env var that the embedded runtime always sets.
+_flet_platform = os.environ.get("FLET_PLATFORM", "")
+if __name__ == "__main__" or _flet_platform in ("android", "ios", "linux", "macos", "windows"):
+    logger.info("Launching ft.run(main)")
+    ft.run(main)
