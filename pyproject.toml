@@ -8,7 +8,7 @@ dependencies = [
     "requests",
     "scrapling",
     "flet",
-    "yt-dlp",
+    "yt-dlp>=2026.02.21",
 ]
 
 [project.scripts]

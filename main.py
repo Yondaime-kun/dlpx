@@ -346,26 +346,13 @@ def main(page: ft.Page):
 
     def show_formats(info: dict, formats: List[FormatInfo], url: str):
         title = info.get("title", "Unknown")
-        items = []
-        for f in formats[:20]:
-            typ = "AV" if f.is_progressive else ("Audio" if f.is_audio_only else "Video")
-            label = f"{f.resolution} · {f.ext} · {typ} · {human_size(f.filesize)}"
-
-            def _on_pick(e, fid=f.format_id, dlg_ref=[]):
-                _close_dialog(dlg_ref[0])
-                start_download(url, title, fid)
-
-            tile = ft.ListTile(
-                title=ft.Text(label, size=14),
-                subtitle=ft.Text(f"ID: {f.format_id} | {f.note}", size=11),
-                trailing=ft.Icon(ft.Icons.DOWNLOAD),
-            )
-            items.append((tile, _on_pick))
-
         best = smart_pick(formats)
+
+        # Build the dialog first so click handlers can reference it directly.
+        lv = ft.ListView(spacing=2, expand=True)
         dlg = ft.AlertDialog(
             title=ft.Text(title, size=16, max_lines=3, overflow=ft.TextOverflow.ELLIPSIS),
-            content=ft.Container(ft.ListView(spacing=2, expand=True), width=350, height=400),
+            content=ft.Container(lv, width=350, height=400),
             actions=[
                 ft.TextButton(
                     "Smart Pick",
@@ -377,12 +364,21 @@ def main(page: ft.Page):
                 ft.TextButton("Cancel", on_click=lambda e: _close_dialog(dlg)),
             ],
         )
-        # Wire up the tile click handlers now that dlg exists
-        lv = dlg.content.content
-        for tile, handler in items:
-            handler.__defaults__ = (handler.__defaults__[0], [dlg])  # type: ignore[union-attr]
-            tile.on_click = handler
-            lv.controls.append(tile)
+
+        for f in formats[:20]:
+            typ = "AV" if f.is_progressive else ("Audio" if f.is_audio_only else "Video")
+            label = f"{f.resolution} · {f.ext} · {typ} · {human_size(f.filesize)}"
+            lv.controls.append(
+                ft.ListTile(
+                    title=ft.Text(label, size=14),
+                    subtitle=ft.Text(f"ID: {f.format_id} | {f.note}", size=11),
+                    trailing=ft.Icon(ft.Icons.DOWNLOAD),
+                    on_click=lambda e, fid=f.format_id: (
+                        _close_dialog(dlg),
+                        start_download(url, title, fid),
+                    ),
+                )
+            )
 
         page.overlay.append(dlg)
         dlg.open = True
