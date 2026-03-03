@@ -29,7 +29,8 @@ uv sync
 Or with pip:
 
 ```bash
-pip install .
+pip install .          # Mobile app deps only (flet, yt-dlp, requests)
+pip install ".[cli]"   # CLI deps (adds rich, scrapling)
 ```
 
 ## Usage
@@ -80,12 +81,12 @@ To build locally:
 ```bash
 pip install flet
 # Fat APK (all architectures)
-flet build apk --product "DLPX" --org "com.dlpx" --project "dlpx"
+flet build apk
 
 # Per-architecture APKs
-flet build apk --arch arm64-v8a --product "DLPX" --org "com.dlpx" --project "dlpx"
-flet build apk --arch armeabi-v7a --product "DLPX" --org "com.dlpx" --project "dlpx"
-flet build apk --arch x86_64 --product "DLPX" --org "com.dlpx" --project "dlpx"
+flet build apk --arch arm64-v8a
+flet build apk --arch armeabi-v7a
+flet build apk --arch x86_64
 ```
 
 Built APKs are available as GitHub Actions artifacts and as release assets for tagged versions.
