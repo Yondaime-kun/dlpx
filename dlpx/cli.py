@@ -82,10 +82,10 @@ def main():
     args = build_parser().parse_args()
 
     # install / uninstall first
-    script_path = Path(__file__).resolve()
+    project_root = Path(__file__).resolve().parent.parent
     if args.install:
         try:
-            install_launcher(script_path, scope=args.install_scope, force=args.install_force)
+            install_launcher(project_root, scope=args.install_scope, force=args.install_force)
         except PermissionError:
             console.print("[red]Permission denied.[/red] Try another scope or proper privileges.")
         except Exception as e:

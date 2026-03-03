@@ -27,7 +27,7 @@ def _resolve_install_target(scope: str) -> Path:
     raise RuntimeError(f"Unknown install scope: {scope}")
 
 
-def install_launcher(script_path: Path, scope: str = "user", force: bool = False):
+def install_launcher(project_root: Path, scope: str = "user", force: bool = False):
     target = _resolve_install_target(scope)
     ensure_parent(target)
 
@@ -38,7 +38,8 @@ def install_launcher(script_path: Path, scope: str = "user", force: bool = False
     py = sys.executable or "python3"
     launcher = f"""#!/usr/bin/env sh
 # Auto-generated launcher for dlp wrapper
-exec {shlex.quote(py)} {shlex.quote(str(script_path))} "$@"
+export PYTHONPATH={shlex.quote(str(project_root))}${{PYTHONPATH:+:$PYTHONPATH}}
+exec {shlex.quote(py)} -m dlpx "$@"
 """
 
     with open(target, "w", encoding="utf-8") as f:
