@@ -21,7 +21,7 @@ from dlpx.gallery_dl import (
     gallery_download_cmd,
 )
 from dlpx.history import ask_url_with_history
-from dlpx.search import interactive_search
+from dlpx.search import interactive_search, is_jable_url, resolve_jable_stream_url
 
 console = Console()
 
@@ -181,6 +181,20 @@ def interactive_gallery(url: str, cfg: Dict[str, Any]):
 
 
 def process_url_interactive(url: str, cfg: Dict[str, Any], forced_engine: Optional[str]):
+    # jable.tv is not supported by yt-dlp; resolve to the HLS stream URL
+    if is_jable_url(url):
+        with console.status("[bold blue]Resolving jable.tv stream URL...[/bold blue]"):
+            try:
+                stream = resolve_jable_stream_url(url)
+            except Exception as e:
+                console.print(f"[red]Failed to resolve jable.tv stream:[/red] {e}")
+                return
+        if not stream:
+            console.print("[red]Could not extract stream URL from jable.tv page[/red]")
+            return
+        console.print(f"[green]Stream URL:[/green] {stream}")
+        url = stream
+
     engine = detect_engine(url, forced_engine, cfg)
     if engine == "gallery-dl":
         interactive_gallery(url, cfg)

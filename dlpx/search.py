@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import json
+import re
 import shutil
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
@@ -102,6 +103,38 @@ def search_jable(query: str, page: int = 1) -> List[SearchResult]:
             ))
 
     return results
+
+
+def is_jable_url(url: str) -> bool:
+    """Check whether a URL belongs to jable.tv."""
+    return "jable.tv" in url.lower()
+
+
+def resolve_jable_stream_url(url: str) -> Optional[str]:
+    """Fetch a jable.tv video page and extract the HLS (m3u8) stream URL.
+
+    jable.tv is not supported by yt-dlp directly. The video pages embed
+    the stream URL in a JavaScript variable ``hlsUrl``. This function
+    fetches the page, finds that variable, and returns the m3u8 URL which
+    *can* be passed to yt-dlp or ffmpeg for download.
+    """
+    session = _get_session()
+    resp = session.get(url, timeout=20)
+    resp.raise_for_status()
+
+    html = resp.text
+
+    # Primary: var hlsUrl = 'https://...m3u8'
+    m = re.search(r"""hlsUrl\s*=\s*['"]([^'"]+?\.m3u8)['"]""", html)
+    if m:
+        return m.group(1)
+
+    # Fallback: any m3u8 URL anywhere in the page
+    m = re.search(r"https?://[^'\"\s]+?\.m3u8", html)
+    if m:
+        return m.group(0)
+
+    return None
 
 
 def search_youtube(query: str, max_results: int = 10, cfg: Optional[Dict[str, Any]] = None) -> List[SearchResult]:

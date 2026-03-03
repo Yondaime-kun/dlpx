@@ -20,7 +20,7 @@ from dlpx.interactive import (
     process_url_interactive, interactive_main_loop,
 )
 from dlpx.batch import read_batch_file, run_batch
-from dlpx.search import search_jable, search_youtube, display_search_results
+from dlpx.search import search_jable, search_youtube, display_search_results, is_jable_url, resolve_jable_stream_url
 from dlpx.utils import sanitize_filename, shell_join, run_live
 
 console = Console()
@@ -141,27 +141,38 @@ def main():
             gallery_list_keys(args.url, cfg)
             return
 
-        if args.url and args.download:
-            engine = detect_engine(args.url, forced_engine, cfg)
+        # Resolve jable.tv URLs to HLS stream URLs (yt-dlp can't handle jable.tv directly)
+        target_url = args.url
+        if target_url and is_jable_url(target_url):
+            console.print("[bold blue]Resolving jable.tv stream URL...[/bold blue]")
+            stream = resolve_jable_stream_url(target_url)
+            if not stream:
+                console.print("[red]Could not extract stream URL from jable.tv page[/red]")
+                return
+            console.print(f"[green]Stream URL:[/green] {stream}")
+            target_url = stream
+
+        if target_url and args.download:
+            engine = detect_engine(target_url, forced_engine, cfg)
             if engine == "yt-dlp":
-                info = yt_info(args.url, cfg)
+                info = yt_info(target_url, cfg)
                 formats = yt_parse(info)
                 chosen = yt_smart_pick(formats, cfg, audio_only=False)
                 if not chosen:
                     console.print("[red]No suitable yt format[/red]")
                     return
                 title = sanitize_filename(info.get("title", "video"))
-                cmd = yt_download_cmd(args.url, cfg, chosen.format_id, f"{title}.%(ext)s")
+                cmd = yt_download_cmd(target_url, cfg, chosen.format_id, f"{title}.%(ext)s")
                 console.print(shell_join(cmd))
                 run_live(cmd)
             else:
-                cmd = gallery_download_cmd(args.url, cfg, None)
+                cmd = gallery_download_cmd(target_url, cfg, None)
                 console.print(shell_join(cmd))
                 run_live(cmd)
             return
 
-        if args.url:
-            process_url_interactive(args.url, cfg, forced_engine)
+        if target_url:
+            process_url_interactive(target_url, cfg, forced_engine)
             console.print("\n1) Input another URL\n2) Exit")
             if Prompt.ask("Choose", default="1").strip() == "1":
                 interactive_main_loop(cfg, forced_engine)
