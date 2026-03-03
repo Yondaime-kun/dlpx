@@ -2,6 +2,8 @@
 
 Universal media downloader wrapper for **yt-dlp** and **gallery-dl**, with built-in search.
 
+Available as a **CLI tool** and a **mobile app** (Android APK via Flet).
+
 ## Features
 
 - **yt-dlp** integration – smart format picking, interactive format selection, download
@@ -12,6 +14,7 @@ Universal media downloader wrapper for **yt-dlp** and **gallery-dl**, with built
 - **Archive** – skip already-downloaded URLs
 - **Doctor** – check tool availability and environment health
 - **Installable launcher** – `dlpx` command (user / termux / system scope)
+- **Mobile app** – Android APK built with Flet, supports all architectures (arm64-v8a, armeabi-v7a, x86_64) and old/new devices (API 21+, Android 5.0+)
 
 ## Requirements
 
@@ -30,6 +33,8 @@ pip install .
 ```
 
 ## Usage
+
+### CLI
 
 ```bash
 # Interactive mode
@@ -57,10 +62,57 @@ python dlp.py --doctor
 python -m dlpx --help
 ```
 
+### Mobile App (Flet)
+
+Run the mobile-friendly GUI locally:
+
+```bash
+pip install flet yt-dlp requests
+python main.py
+```
+
+### Building APKs
+
+APKs are automatically built by GitHub Actions on every push to `main` and on tag pushes. You can also trigger a build manually from the Actions tab.
+
+To build locally:
+
+```bash
+pip install flet
+# Fat APK (all architectures)
+flet build apk --android-min-sdk-version 21 --product "DLPX" --org "com.dlpx" --project "dlpx"
+
+# Per-architecture APKs
+flet build apk --android-min-sdk-version 21 --android-arch arm64-v8a --product "DLPX" --org "com.dlpx" --project "dlpx"
+flet build apk --android-min-sdk-version 21 --android-arch armeabi-v7a --product "DLPX" --org "com.dlpx" --project "dlpx"
+flet build apk --android-min-sdk-version 21 --android-arch x86_64 --product "DLPX" --org "com.dlpx" --project "dlpx"
+```
+
+Built APKs are available as GitHub Actions artifacts and as release assets for tagged versions.
+
+#### Architecture Support
+
+| Architecture | Devices |
+|---|---|
+| `arm64-v8a` | Modern 64-bit ARM phones (most current devices) |
+| `armeabi-v7a` | Older 32-bit ARM phones |
+| `x86_64` | x86 tablets, emulators |
+| `universal` | Fat APK containing all architectures |
+
+Minimum Android version: **5.0 (API 21)**.
+
+## Tests
+
+```bash
+pip install pytest flet requests yt-dlp
+python -m pytest tests/ -v
+```
+
 ## Project Structure
 
 ```
-dlp.py                 # Thin entry point
+dlp.py                 # Thin CLI entry point
+main.py                # Flet mobile app entry point
 dlpx/
 ├── __init__.py        # Package init
 ├── __main__.py        # python -m dlpx entry point
@@ -77,4 +129,9 @@ dlpx/
 ├── search.py          # Search (jable.tv scraper)
 ├── interactive.py     # Interactive flows and main loop
 └── batch.py           # Batch processing
+tests/
+└── test_app.py        # Tests for the Flet app backend
+.github/
+└── workflows/
+    └── build-apk.yml  # CI workflow for building APKs
 ```
