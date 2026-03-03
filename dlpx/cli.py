@@ -20,7 +20,7 @@ from dlpx.interactive import (
     process_url_interactive, interactive_main_loop,
 )
 from dlpx.batch import read_batch_file, run_batch
-from dlpx.search import search_jable, display_search_results
+from dlpx.search import search_jable, search_youtube, display_search_results
 from dlpx.utils import sanitize_filename, shell_join, run_live
 
 console = Console()
@@ -54,7 +54,7 @@ def build_parser():
 
     # search
     p.add_argument("--search", help="Search query (uses jable.tv by default)")
-    p.add_argument("--search-provider", choices=["jable"], default="jable", help="Search provider")
+    p.add_argument("--search-provider", choices=["jable", "youtube"], default="jable", help="Search provider")
     p.add_argument("--search-page", type=int, default=1, help="Search results page number")
 
     # output
@@ -117,6 +117,8 @@ def main():
         if args.search:
             if args.search_provider == "jable":
                 results = search_jable(args.search, page=args.search_page)
+            elif args.search_provider == "youtube":
+                results = search_youtube(args.search, cfg=cfg)
             else:
                 console.print(f"[red]Unknown provider: {args.search_provider}[/red]")
                 return

@@ -1,0 +1,13 @@
+[project]
+name = "dlpx"
+version = "0.1.0"
+description = "Universal media downloader wrapper for yt-dlp and gallery-dl with built-in search"
+requires-python = ">=3.8"
+dependencies = [
+    "rich",
+    "requests",
+    "scrapling",
+]
+
+[project.scripts]
+dlpx = "dlpx.cli:main"

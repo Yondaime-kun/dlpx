@@ -6,7 +6,7 @@ Universal media downloader wrapper for **yt-dlp** and **gallery-dl**, with built
 
 - **yt-dlp** integration – smart format picking, interactive format selection, download
 - **gallery-dl** integration – preview gallery items, export links, batch download
-- **Search** – search jable.tv directly from the CLI or interactive mode
+- **Search** – search jable.tv (via scrapling) and YouTube (via yt-dlp) directly from the CLI or interactive mode
 - **Batch mode** – process multiple URLs from a file with parallel workers
 - **Profiles & config** – JSON config with profiles, cookie/proxy overrides
 - **Archive** – skip already-downloaded URLs
@@ -20,7 +20,13 @@ Universal media downloader wrapper for **yt-dlp** and **gallery-dl**, with built
 - [gallery-dl](https://github.com/mikf/gallery-dl)
 
 ```bash
-pip install -r requirements.txt
+uv sync
+```
+
+Or with pip:
+
+```bash
+pip install .
 ```
 
 ## Usage
@@ -31,6 +37,9 @@ python dlp.py
 
 # Search jable.tv from CLI
 python dlp.py --search "query"
+
+# Search YouTube from CLI
+python dlp.py --search "query" --search-provider youtube
 
 # Direct URL
 python dlp.py https://example.com/video

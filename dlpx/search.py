@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import re
+import json
+import shutil
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from urllib.parse import quote_plus, urljoin
 
 import requests
-from bs4 import BeautifulSoup
+from scrapling.parser import Adaptor
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
+
+from dlpx.utils import run_cmd
 
 console = Console()
 
@@ -23,7 +26,7 @@ _SESSION_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-JABLE_BASE = "https://jable.tv"
+JABLE_BASE = "https://en.jable.tv"
 
 
 @dataclass
@@ -42,7 +45,7 @@ def _get_session() -> requests.Session:
 
 
 def search_jable(query: str, page: int = 1) -> List[SearchResult]:
-    """Scrape jable.tv search results for the given query."""
+    """Scrape en.jable.tv search results for the given query using scrapling."""
     encoded = quote_plus(query)
     url = f"{JABLE_BASE}/search/{encoded}/"
     if page > 1:
@@ -52,36 +55,42 @@ def search_jable(query: str, page: int = 1) -> List[SearchResult]:
     resp = session.get(url, timeout=15)
     resp.raise_for_status()
 
-    soup = BeautifulSoup(resp.text, "html.parser")
+    page_doc = Adaptor(resp.text, url=JABLE_BASE)
     results: List[SearchResult] = []
 
-    video_items = soup.select("div.video-img-box")
+    video_items = page_doc.css("div.video-img-box")
     if not video_items:
-        video_items = soup.select("div.col-6.col-sm-4.col-lg-3")
+        video_items = page_doc.css("div.col-6.col-sm-4.col-lg-3")
     if not video_items:
-        video_items = soup.select("div.item")
+        video_items = page_doc.css("div.item")
 
     for item in video_items:
-        a_tag = item.select_one("a[href]")
-        if not a_tag:
+        a_tags = item.css("a[href]")
+        if not a_tags:
             continue
-        href = a_tag.get("href", "")
+        a_tag = a_tags[0]
+        href = a_tag.attrib.get("href", "")
         if not href:
             continue
         link = urljoin(JABLE_BASE, href)
 
-        img_tag = item.select_one("img")
+        imgs = item.css("img")
         thumb = ""
-        if img_tag:
-            thumb = img_tag.get("data-src", "") or img_tag.get("src", "")
+        if imgs:
+            thumb = imgs[0].attrib.get("data-src", "") or imgs[0].attrib.get("src", "")
 
-        title_el = item.select_one("h6.title a") or item.select_one(".title a") or a_tag
-        title = title_el.get_text(strip=True) if title_el else ""
+        title_els = item.css("h6.title a")
+        if not title_els:
+            title_els = item.css(".title a")
+        title_el = title_els[0] if title_els else a_tag
+        title = title_el.text.strip() if title_el.text else ""
         if not title:
-            title = a_tag.get("title", "") or href.rstrip("/").rsplit("/", 1)[-1]
+            title = a_tag.attrib.get("title", "") or href.rstrip("/").rsplit("/", 1)[-1]
 
-        dur_el = item.select_one(".duration") or item.select_one(".label")
-        duration = dur_el.get_text(strip=True) if dur_el else ""
+        dur_els = item.css(".duration")
+        if not dur_els:
+            dur_els = item.css(".label")
+        duration = dur_els[0].text.strip() if dur_els and dur_els[0].text else ""
 
         if link and title:
             results.append(SearchResult(
@@ -90,6 +99,48 @@ def search_jable(query: str, page: int = 1) -> List[SearchResult]:
                 thumbnail=thumb,
                 duration=duration,
                 source="jable.tv",
+            ))
+
+    return results
+
+
+def search_youtube(query: str, max_results: int = 10, cfg: Optional[Dict[str, Any]] = None) -> List[SearchResult]:
+    """Search YouTube using yt-dlp's built-in ytsearch extractor."""
+    if not shutil.which("yt-dlp"):
+        raise RuntimeError("yt-dlp not found")
+
+    from dlpx.yt_dlp import yt_base
+    base = yt_base(cfg or {})
+    cmd = base + [
+        "-J", "--no-warnings", "--flat-playlist",
+        f"ytsearch{max_results}:{query}",
+    ]
+    r = run_cmd(cmd, check=True)
+    data = json.loads(r.stdout)
+
+    results: List[SearchResult] = []
+    for entry in data.get("entries", []):
+        vid_url = entry.get("url") or entry.get("webpage_url", "")
+        if vid_url and not vid_url.startswith("http"):
+            vid_url = f"https://www.youtube.com/watch?v={vid_url}"
+        title = entry.get("title", "")
+        thumb = entry.get("thumbnail", "")
+        if not thumb:
+            thumbnails = entry.get("thumbnails")
+            if thumbnails:
+                thumb = thumbnails[0].get("url", "")
+        dur_secs = entry.get("duration")
+        duration = ""
+        if dur_secs:
+            m, s = divmod(int(dur_secs), 60)
+            duration = f"{m}:{s:02d}"
+        if vid_url and title:
+            results.append(SearchResult(
+                title=title,
+                url=vid_url,
+                thumbnail=thumb,
+                duration=duration,
+                source="youtube",
             ))
 
     return results
@@ -114,7 +165,7 @@ def display_search_results(results: List[SearchResult], title: str = "Search Res
     console.print(t)
 
 
-def interactive_search():
+def interactive_search(cfg: Optional[Dict[str, Any]] = None):
     """Run an interactive search session."""
     while True:
         query = Prompt.ask("\n[bold]Search query[/bold] (q=quit)").strip()
@@ -122,14 +173,20 @@ def interactive_search():
             break
 
         console.print(f"\n[bold]Search provider:[/bold]")
-        console.print("1) jable.tv")
+        console.print("1) jable.tv\n2) YouTube (via yt-dlp)")
         provider = Prompt.ask("Choose provider", default="1").strip()
 
         with console.status("[bold blue]Searching...[/bold blue]"):
-            if provider == "1":
-                results = search_jable(query)
-            else:
-                console.print("[red]Invalid provider[/red]")
+            try:
+                if provider == "1":
+                    results = search_jable(query)
+                elif provider == "2":
+                    results = search_youtube(query, cfg=cfg)
+                else:
+                    console.print("[red]Invalid provider[/red]")
+                    continue
+            except Exception as e:
+                console.print(f"[red]Search failed:[/red] {e}")
                 continue
 
         display_search_results(results, f"Results for '{query}'")

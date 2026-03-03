@@ -198,7 +198,7 @@ def interactive_main_loop(cfg: Dict[str, Any], forced_engine: Optional[str]):
             break
 
         if url.lower() in {"/search", "search"}:
-            result_url = interactive_search()
+            result_url = interactive_search(cfg=cfg)
             if result_url:
                 process_url_interactive(result_url, cfg, forced_engine)
         else:
@@ -207,7 +207,7 @@ def interactive_main_loop(cfg: Dict[str, Any], forced_engine: Optional[str]):
         console.print("\n1) Input another URL\n2) Search\n3) Exit")
         nxt = Prompt.ask("Choose", default="1").strip()
         if nxt == "2":
-            result_url = interactive_search()
+            result_url = interactive_search(cfg=cfg)
             if result_url:
                 process_url_interactive(result_url, cfg, forced_engine)
         elif nxt == "3":
