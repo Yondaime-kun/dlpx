@@ -328,7 +328,7 @@ def _build_ui(page: ft.Page):
             download_list.controls.append(
                 ft.Container(
                     ft.Text("No downloads yet", size=16, color=ft.Colors.GREY),
-                    alignment=ft.alignment.center,
+                    alignment=ft.Alignment.CENTER,
                     padding=40,
                 )
             )
@@ -372,7 +372,7 @@ def _build_ui(page: ft.Page):
                                 ft.ProgressBar(value=bar_value, color=color),
                             ]
                         ),
-                        padding=ft.padding.only(bottom=8),
+                        padding=ft.Padding.only(bottom=8),
                     )
                 )
             )
@@ -547,8 +547,8 @@ def _build_ui(page: ft.Page):
                         ],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    padding=ft.padding.only(top=40, bottom=20),
-                    alignment=ft.alignment.center,
+                    padding=ft.Padding.only(top=40, bottom=20),
+                    alignment=ft.Alignment.CENTER,
                 ),
                 ft.Container(
                     ft.Column(
@@ -584,11 +584,11 @@ def _build_ui(page: ft.Page):
                         ],
                         spacing=12,
                     ),
-                    padding=ft.padding.symmetric(horizontal=16),
+                    padding=ft.Padding.symmetric(horizontal=16),
                 ),
                 ft.Container(
                     ft.Column([home_status, home_bar], spacing=4),
-                    padding=ft.padding.symmetric(horizontal=16, vertical=8),
+                    padding=ft.Padding.symmetric(horizontal=16, vertical=8),
                 ),
                 ft.Container(
                     ft.Column(
@@ -620,7 +620,7 @@ def _build_ui(page: ft.Page):
                         ],
                         spacing=8,
                     ),
-                    padding=ft.padding.symmetric(horizontal=16, vertical=8),
+                    padding=ft.Padding.symmetric(horizontal=16, vertical=8),
                 ),
             ],
             scroll=ft.ScrollMode.AUTO,
@@ -691,7 +691,7 @@ def _build_ui(page: ft.Page):
                     search_list.controls.append(
                         ft.Container(
                             ft.Text("No results found", size=16, color=ft.Colors.GREY),
-                            alignment=ft.alignment.center,
+                            alignment=ft.Alignment.CENTER,
                             padding=40,
                         )
                     )
@@ -752,7 +752,7 @@ def _build_ui(page: ft.Page):
                         ],
                         spacing=12,
                     ),
-                    padding=ft.padding.only(top=20, left=16, right=16, bottom=8),
+                    padding=ft.Padding.only(top=20, left=16, right=16, bottom=8),
                 ),
                 search_list,
             ]
@@ -778,7 +778,7 @@ def _build_ui(page: ft.Page):
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     ),
-                    padding=ft.padding.only(top=20, left=16, right=16, bottom=8),
+                    padding=ft.Padding.only(top=20, left=16, right=16, bottom=8),
                 ),
                 download_list,
             ]
@@ -864,7 +864,7 @@ def _build_ui(page: ft.Page):
                         ],
                         spacing=16,
                     ),
-                    padding=ft.padding.only(top=20, left=16, right=16),
+                    padding=ft.Padding.only(top=20, left=16, right=16),
                 )
             ],
             scroll=ft.ScrollMode.AUTO,
