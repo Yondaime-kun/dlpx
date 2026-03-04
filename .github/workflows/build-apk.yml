@@ -55,7 +55,7 @@ jobs:
           channel: stable
 
       - name: Install Flet
-        run: pip install flet
+        run: pip install flet "chardet<7"
 
       - name: Build APK (${{ matrix.arch }})
         run: |
@@ -95,7 +95,7 @@ jobs:
           channel: stable
 
       - name: Install Flet
-        run: pip install flet
+        run: pip install flet "chardet<7"
 
       - name: Build fat APK (all architectures)
         run: |
