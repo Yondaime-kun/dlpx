@@ -1,6 +1,7 @@
 """Tests for the DLPX Flet app backend helpers."""
 
 import pytest
+import flet as ft
 from main import (
     FormatInfo,
     SearchResult,
@@ -183,3 +184,95 @@ class TestSearchResult:
         r = SearchResult(title="Test", url="https://example.com", duration="3:45", source="youtube")
         assert r.title == "Test"
         assert r.source == "youtube"
+
+
+# ── Flet API compatibility ────────────────────────────
+# These tests verify that all Flet attributes used in main.py
+# exist in the installed Flet version, catching breaking API
+# changes before a 20-minute APK build cycle.
+
+
+class TestFletControls:
+    """Verify Flet control classes used in main.py are importable."""
+
+    @pytest.mark.parametrize("name", [
+        "AlertDialog", "Card", "CircleAvatar", "Column", "Container",
+        "Divider", "Dropdown", "ElevatedButton", "Icon", "IconButton",
+        "ListTile", "ListView", "NavigationBar", "NavigationBarDestination",
+        "OutlinedButton", "Page", "ProgressBar", "Row", "SafeArea",
+        "SnackBar", "Text", "TextButton", "TextField", "Theme",
+    ])
+    def test_control_exists(self, name):
+        assert hasattr(ft, name), f"ft.{name} missing"
+        assert callable(getattr(ft, name))
+
+    def test_dropdown_option(self):
+        assert hasattr(ft.dropdown, "Option")
+        assert callable(ft.dropdown.Option)
+
+    def test_ft_run(self):
+        assert hasattr(ft, "run")
+        assert callable(ft.run)
+
+
+class TestFletEnums:
+    """Verify Flet enum constants used in main.py resolve correctly."""
+
+    @pytest.mark.parametrize("attr", [
+        "Colors.RED", "Colors.BLUE", "Colors.GREEN", "Colors.GREY",
+        "Colors.ORANGE", "Colors.WHITE",
+    ])
+    def test_color(self, attr):
+        obj = ft
+        for part in attr.split("."):
+            obj = getattr(obj, part)
+
+    @pytest.mark.parametrize("attr", [
+        "Icons.CHECK_CIRCLE", "Icons.CLEAR", "Icons.DELETE_SWEEP",
+        "Icons.DOWNLOAD", "Icons.DOWNLOADING", "Icons.ERROR",
+        "Icons.FOLDER", "Icons.HELP", "Icons.HOME",
+        "Icons.HOURGLASS_EMPTY", "Icons.INFO", "Icons.LINK",
+        "Icons.LIST", "Icons.REFRESH", "Icons.SEARCH",
+        "Icons.SETTINGS", "Icons.VIDEO_LIBRARY",
+    ])
+    def test_icon(self, attr):
+        obj = ft
+        for part in attr.split("."):
+            obj = getattr(obj, part)
+
+    @pytest.mark.parametrize("attr", [
+        "FontWeight.BOLD",
+        "TextOverflow.ELLIPSIS",
+        "ScrollMode.AUTO",
+        "ThemeMode.DARK",
+        "CrossAxisAlignment.CENTER",
+        "MainAxisAlignment.SPACE_BETWEEN",
+    ])
+    def test_enum_constant(self, attr):
+        obj = ft
+        for part in attr.split("."):
+            obj = getattr(obj, part)
+
+
+class TestFletAlignment:
+    """Verify Alignment class API (was ft.alignment.center, now ft.Alignment.CENTER)."""
+
+    def test_alignment_center(self):
+        assert hasattr(ft, "Alignment")
+        assert hasattr(ft.Alignment, "CENTER")
+
+
+class TestFletPadding:
+    """Verify Padding class methods (was ft.padding.*, now ft.Padding.*)."""
+
+    def test_padding_only(self):
+        result = ft.Padding.only(top=10, bottom=5)
+        assert result is not None
+
+    def test_padding_symmetric(self):
+        result = ft.Padding.symmetric(horizontal=16, vertical=8)
+        assert result is not None
+
+    def test_padding_only_all_kwargs(self):
+        result = ft.Padding.only(top=20, left=16, right=16, bottom=8)
+        assert result is not None
