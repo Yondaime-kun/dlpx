@@ -267,12 +267,19 @@ class TestFletPadding:
 
     def test_padding_only(self):
         result = ft.Padding.only(top=10, bottom=5)
-        assert result is not None
+        assert result.top == 10
+        assert result.bottom == 5
 
     def test_padding_symmetric(self):
         result = ft.Padding.symmetric(horizontal=16, vertical=8)
-        assert result is not None
+        assert result.left == 16
+        assert result.right == 16
+        assert result.top == 8
+        assert result.bottom == 8
 
     def test_padding_only_all_kwargs(self):
         result = ft.Padding.only(top=20, left=16, right=16, bottom=8)
-        assert result is not None
+        assert result.top == 20
+        assert result.left == 16
+        assert result.right == 16
+        assert result.bottom == 8
