@@ -4,10 +4,29 @@ version = "0.1.0"
 description = "Universal media downloader wrapper for yt-dlp and gallery-dl with built-in search"
 requires-python = ">=3.8"
 dependencies = [
-    "rich",
+    "flet",
+    "gallery-dl",
     "requests",
+    "yt-dlp>=2026.02.21",
+]
+
+[project.optional-dependencies]
+cli = [
+    "rich",
     "scrapling",
 ]
 
 [project.scripts]
 dlpx = "dlpx.cli:main"
+
+[tool.flet]
+org = "com.dlpx"
+product = "DLPX"
+
+[tool.flet.app]
+exclude = ["dlpx", "dlp.py", "tests", ".github", "uv.lock"]
+
+[tool.flet.android.permission]
+"android.permission.INTERNET" = true
+"android.permission.WRITE_EXTERNAL_STORAGE" = true
+"android.permission.READ_EXTERNAL_STORAGE" = true

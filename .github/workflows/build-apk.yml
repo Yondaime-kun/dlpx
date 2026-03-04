@@ -1,0 +1,129 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: "3.29.0"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: pip install flet requests pytest yt-dlp
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
+  build-apk:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [arm64-v8a, armeabi-v7a, x86_64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Install Flet
+        run: pip install flet "chardet<7"
+
+      - name: Build APK (${{ matrix.arch }})
+        run: |
+          flet build apk \
+            --arch ${{ matrix.arch }} \
+            --yes
+
+      - name: Rename APK
+        run: |
+          mkdir -p dist
+          cp build/apk/*.apk dist/dlpx-${{ matrix.arch }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dlpx-${{ matrix.arch }}
+          path: dist/dlpx-${{ matrix.arch }}.apk
+
+  build-fat-apk:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Install Flet
+        run: pip install flet "chardet<7"
+
+      - name: Build fat APK (all architectures)
+        run: |
+          flet build apk \
+            --yes
+
+      - name: Rename APK
+        run: |
+          mkdir -p dist
+          cp build/apk/*.apk dist/dlpx-universal.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dlpx-universal
+          path: dist/dlpx-universal.apk
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-apk, build-fat-apk]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4.1.3
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.apk
+          generate_release_notes: true
