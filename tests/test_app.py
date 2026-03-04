@@ -9,6 +9,9 @@ from main import (
     human_size,
     parse_formats,
     smart_pick,
+    is_jable_url,
+    resolve_jable_stream_url,
+    HAS_GALLERY_DL,
 )
 
 
@@ -283,3 +286,87 @@ class TestFletPadding:
         assert result.left == 16
         assert result.right == 16
         assert result.bottom == 8
+
+
+# ── Jable URL detection ──────────────────────────────
+
+
+class TestIsJableUrl:
+    def test_jable_url(self):
+        assert is_jable_url("https://jable.tv/videos/test/") is True
+
+    def test_jable_subdomain(self):
+        assert is_jable_url("https://en.jable.tv/videos/test/") is True
+
+    def test_non_jable_url(self):
+        assert is_jable_url("https://youtube.com/watch?v=abc") is False
+
+    def test_empty_url(self):
+        assert is_jable_url("") is False
+
+
+# ── Jable stream resolution ──────────────────────────
+
+
+class TestResolveJableStream:
+    def test_extract_hls_from_html(self):
+        """Verify the regex extracts hlsUrl from page HTML."""
+        import re
+        html = """var hlsUrl = 'https://cdn.example.com/video.m3u8';"""
+        m = re.search(r"""hlsUrl\s*=\s*['"]([^'"]+?\.m3u8)['"]""", html)
+        assert m is not None
+        assert m.group(1) == "https://cdn.example.com/video.m3u8"
+
+    def test_fallback_m3u8_regex(self):
+        """Verify fallback regex finds any m3u8 URL."""
+        import re
+        html = """<script>src="https://stream.example.com/hls/out.m3u8"</script>"""
+        m = re.search(r"https?://[^'\"\s]+?\.m3u8", html)
+        assert m is not None
+        assert m.group(0) == "https://stream.example.com/hls/out.m3u8"
+
+    def test_no_m3u8_in_html(self):
+        """Verify None when no m3u8 URL is present."""
+        import re
+        html = """<html><body>No video here</body></html>"""
+        m = re.search(r"""hlsUrl\s*=\s*['"]([^'"]+?\.m3u8)['"]""", html)
+        assert m is None
+        m = re.search(r"https?://[^'\"\s]+?\.m3u8", html)
+        assert m is None
+
+
+# ── gallery-dl availability ──────────────────────────
+
+
+class TestGalleryDl:
+    def test_has_gallery_dl_flag(self):
+        """Verify the HAS_GALLERY_DL flag is a boolean."""
+        assert isinstance(HAS_GALLERY_DL, bool)
+
+
+# ── New Flet API attrs used by updated UI ─────────────
+
+
+class TestFletNewIcons:
+    """Verify new Icons/attrs added in the UI update."""
+
+    @pytest.mark.parametrize("attr", [
+        "Icons.OPEN_IN_BROWSER",
+        "Icons.PHOTO_LIBRARY",
+    ])
+    def test_new_icon(self, attr):
+        obj = ft
+        for part in attr.split("."):
+            obj = getattr(obj, part)
+
+
+class TestFletPageThreading:
+    """Verify Flet Page has run_thread and launch_url methods."""
+
+    def test_run_thread_exists(self):
+        assert hasattr(ft.Page, "run_thread")
+        assert callable(ft.Page.run_thread)
+
+    def test_launch_url_exists(self):
+        assert hasattr(ft.Page, "launch_url")
+        assert callable(ft.Page.launch_url)

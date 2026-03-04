@@ -6,7 +6,6 @@ import logging
 import os
 import re
 import sys
-import threading
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,6 +56,17 @@ except Exception:
     HAS_YT_DLP = False
     yt_dlp_lib = None
     logger.warning("yt-dlp not available: %s", traceback.format_exc())
+
+try:
+    import gallery_dl as gallery_dl_lib
+
+    HAS_GALLERY_DL = True
+    _gdl_ver = getattr(gallery_dl_lib, "__version__", "unknown")
+    logger.info("gallery-dl loaded: %s", _gdl_ver)
+except Exception:
+    HAS_GALLERY_DL = False
+    gallery_dl_lib = None
+    logger.warning("gallery-dl not available")
 
 
 # ── Data models ───────────────────────────────────────
@@ -261,6 +271,50 @@ def search_jable_api(query: str, page: int = 1) -> List[SearchResult]:
     return results
 
 
+def is_jable_url(url: str) -> bool:
+    """Check whether a URL belongs to jable.tv."""
+    from urllib.parse import urlparse
+    netloc = urlparse(url).netloc.lower()
+    return netloc == "jable.tv" or netloc.endswith(".jable.tv")
+
+
+def resolve_jable_stream_url(url: str) -> Optional[str]:
+    """Fetch a jable.tv video page and extract the HLS (m3u8) stream URL.
+
+    jable.tv is not supported by yt-dlp directly.  The video pages embed
+    the stream URL in a JavaScript variable ``hlsUrl``.
+    """
+    resp = requests.get(url, headers=_SESSION_HEADERS, timeout=20)
+    resp.raise_for_status()
+    html = resp.text
+
+    m = re.search(r"""hlsUrl\s*=\s*['"]([^'"]+?\.m3u8)['"]""", html)
+    if m:
+        return m.group(1)
+
+    m = re.search(r"https?://[^'\"\s]+?\.m3u8", html)
+    if m:
+        return m.group(0)
+
+    return None
+
+
+def download_gallery(
+    url: str,
+    output_dir: str,
+    progress_hook: Optional[Callable] = None,
+) -> str:
+    """Download images/gallery using gallery-dl Python API."""
+    if not HAS_GALLERY_DL:
+        raise RuntimeError("gallery-dl is not installed")
+    gallery_dl_lib.config.clear()
+    gallery_dl_lib.config.set(("extractor",), "directory", [])
+    gallery_dl_lib.config.set(("extractor",), "base-directory", output_dir)
+    job_inst = gallery_dl_lib.job.DownloadJob(url)
+    job_inst.run()
+    return output_dir
+
+
 # ── Flet UI ───────────────────────────────────────────
 
 
@@ -406,17 +460,43 @@ def _build_ui(page: ft.Page):
                         task.status = "done"
                         refresh_downloads()
 
-                download_media(url, out_dir, format_id, _hook)
+                dl_url = url
+                # jable.tv: resolve HLS stream URL first
+                if is_jable_url(url):
+                    logger.info("Resolving jable.tv stream for %s", url)
+                    stream = resolve_jable_stream_url(url)
+                    if stream:
+                        dl_url = stream
+                        logger.info("Resolved to %s", stream)
+                    else:
+                        raise RuntimeError(
+                            "Could not extract stream URL. "
+                            "Try 'Open in Browser' instead."
+                        )
+
+                download_media(dl_url, out_dir, format_id, _hook)
                 task.status = "done"
                 task.progress = 1.0
                 show_snack(f"Downloaded: {title}")
             except Exception as exc:
+                # Fallback to gallery-dl for non-video URLs
+                if HAS_GALLERY_DL and not is_jable_url(url):
+                    try:
+                        logger.info("yt-dlp failed, trying gallery-dl for %s", url)
+                        download_gallery(url, out_dir)
+                        task.status = "done"
+                        task.progress = 1.0
+                        show_snack(f"Downloaded (gallery-dl): {title}")
+                        refresh_downloads()
+                        return
+                    except Exception as gdl_exc:
+                        logger.warning("gallery-dl also failed: %s", gdl_exc)
                 task.status = "error"
                 task.error = str(exc)[:100]
                 show_snack(f"Error: {str(exc)[:60]}", ft.Colors.RED)
             refresh_downloads()
 
-        threading.Thread(target=_run, daemon=True).start()
+        page.run_thread(_run)
 
     # ── Format selection dialog ──
     def _close_dialog(dlg):
@@ -467,9 +547,23 @@ def _build_ui(page: ft.Page):
     home_status = ft.Text("", size=13, visible=False)
     home_bar = ft.ProgressBar(visible=False)
 
+    def _open_in_browser(url_str: str):
+        """Open a URL in the device's default browser / external app."""
+        if url_str and url_str.strip():
+            page.launch_url(url_str.strip())
+            show_snack("Opened in browser")
+
     def fetch_formats(url_str: str):
         if not url_str or not url_str.strip():
             show_snack("Please enter a URL", ft.Colors.ORANGE)
+            return
+        url_clean = url_str.strip()
+
+        # jable.tv: yt-dlp can't fetch info — go directly to download
+        if is_jable_url(url_clean):
+            slug = url_clean.rstrip("/").rsplit("/", 1)[-1]
+            title = slug.replace("-", " ").title()
+            start_download(url_clean, title)
             return
 
         def _run():
@@ -479,27 +573,35 @@ def _build_ui(page: ft.Page):
                 home_status.visible = True
                 home_bar.visible = True
                 page.update()
-                info = fetch_info(url_str.strip())
+                info = fetch_info(url_clean)
                 title = info.get("title", "Unknown")
                 formats = parse_formats(info)
                 home_status.visible = False
                 home_bar.visible = False
                 page.update()
                 if formats:
-                    show_formats(info, formats, url_str.strip())
+                    show_formats(info, formats, url_clean)
                 else:
-                    start_download(url_str.strip(), title)
+                    start_download(url_clean, title)
             except Exception as exc:
                 home_status.value = f"Error: {exc}"
                 home_status.color = ft.Colors.RED
                 home_bar.visible = False
                 page.update()
 
-        threading.Thread(target=_run, daemon=True).start()
+        page.run_thread(_run)
 
     def quick_dl(url_str: str):
         if not url_str or not url_str.strip():
             show_snack("Please enter a URL", ft.Colors.ORANGE)
+            return
+        url_clean = url_str.strip()
+
+        # jable.tv: yt-dlp can't fetch info — go directly to download
+        if is_jable_url(url_clean):
+            slug = url_clean.rstrip("/").rsplit("/", 1)[-1]
+            title = slug.replace("-", " ").title()
+            start_download(url_clean, title)
             return
 
         def _run():
@@ -508,21 +610,21 @@ def _build_ui(page: ft.Page):
                 home_status.visible = True
                 home_bar.visible = True
                 page.update()
-                info = fetch_info(url_str.strip())
+                info = fetch_info(url_clean)
                 title = info.get("title", "Unknown")
                 formats = parse_formats(info)
                 best = smart_pick(formats)
                 home_status.visible = False
                 home_bar.visible = False
                 page.update()
-                start_download(url_str.strip(), title, best.format_id if best else None)
+                start_download(url_clean, title, best.format_id if best else None)
             except Exception as exc:
                 home_status.value = f"Error: {exc}"
                 home_status.color = ft.Colors.RED
                 home_bar.visible = False
                 page.update()
 
-        threading.Thread(target=_run, daemon=True).start()
+        page.run_thread(_run)
 
     # ══════════════════════════════════════════════════
     # HOME
@@ -579,6 +681,11 @@ def _build_ui(page: ft.Page):
                                         icon=ft.Icons.CLEAR,
                                         on_click=lambda e: _clear_url(),
                                     ),
+                                    ft.OutlinedButton(
+                                        "Open in Browser",
+                                        icon=ft.Icons.OPEN_IN_BROWSER,
+                                        on_click=lambda e: _open_in_browser(url_field.value),
+                                    ),
                                 ]
                             ),
                         ],
@@ -599,7 +706,19 @@ def _build_ui(page: ft.Page):
                                         leading=ft.Icon(ft.Icons.VIDEO_LIBRARY),
                                         title=ft.Text("Supported Sites"),
                                         subtitle=ft.Text(
-                                            "YouTube, Twitter/X, Reddit, Instagram, TikTok, and 1800+ more"
+                                            "YouTube, Twitter/X, Reddit, Instagram, TikTok, jable.tv, and 1800+ more"
+                                        ),
+                                    ),
+                                    padding=4,
+                                )
+                            ),
+                            ft.Card(
+                                ft.Container(
+                                    ft.ListTile(
+                                        leading=ft.Icon(ft.Icons.PHOTO_LIBRARY),
+                                        title=ft.Text("Gallery Downloads"),
+                                        subtitle=ft.Text(
+                                            f"gallery-dl: {'Available' if HAS_GALLERY_DL else 'Not installed'}"
                                         ),
                                     ),
                                     padding=4,
@@ -714,10 +833,21 @@ def _build_ui(page: ft.Page):
                                             f"{r.source} · {r.duration}" if r.duration else r.source,
                                             size=12,
                                         ),
-                                        trailing=ft.IconButton(
-                                            ft.Icons.DOWNLOAD,
-                                            tooltip="Quick download",
-                                            on_click=lambda e, u=r.url, t=r.title: start_download(u, t),
+                                        trailing=ft.Row(
+                                            [
+                                                ft.IconButton(
+                                                    ft.Icons.OPEN_IN_BROWSER,
+                                                    tooltip="Open in browser",
+                                                    on_click=lambda e, u=r.url: _open_in_browser(u),
+                                                ),
+                                                ft.IconButton(
+                                                    ft.Icons.DOWNLOAD,
+                                                    tooltip="Quick download",
+                                                    on_click=lambda e, u=r.url, t=r.title: start_download(u, t),
+                                                ),
+                                            ],
+                                            spacing=0,
+                                            tight=True,
                                         ),
                                         on_click=lambda e, u=r.url: _use_result(u),
                                     ),
@@ -732,7 +862,7 @@ def _build_ui(page: ft.Page):
                 search_bar.visible = False
                 page.update()
 
-        threading.Thread(target=_run, daemon=True).start()
+        page.run_thread(_run)
 
     search_view = ft.Container(
         ft.Column(
@@ -833,7 +963,7 @@ def _build_ui(page: ft.Page):
                                         leading=ft.Icon(ft.Icons.INFO),
                                         title=ft.Text("DLPX"),
                                         subtitle=ft.Text(
-                                            "Universal Media Downloader\nPowered by yt-dlp + Flet"
+                                            "Universal Media Downloader\nPowered by yt-dlp + gallery-dl + Flet"
                                         ),
                                     ),
                                     padding=4,
@@ -843,6 +973,11 @@ def _build_ui(page: ft.Page):
                                 f"yt-dlp: {'Available' if HAS_YT_DLP else 'Not installed'}",
                                 size=13,
                                 color=ft.Colors.GREEN if HAS_YT_DLP else ft.Colors.RED,
+                            ),
+                            ft.Text(
+                                f"gallery-dl: {'Available' if HAS_GALLERY_DL else 'Not installed'}",
+                                size=13,
+                                color=ft.Colors.GREEN if HAS_GALLERY_DL else ft.Colors.RED,
                             ),
                             ft.Text(
                                 f"Platform: {os.environ.get('FLET_PLATFORM', 'desktop')}",

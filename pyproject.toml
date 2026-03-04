@@ -5,6 +5,7 @@ description = "Universal media downloader wrapper for yt-dlp and gallery-dl with
 requires-python = ">=3.8"
 dependencies = [
     "flet",
+    "gallery-dl",
     "requests",
     "yt-dlp>=2026.02.21",
 ]
