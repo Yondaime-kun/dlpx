@@ -283,6 +283,8 @@ def resolve_jable_stream_url(url: str) -> Optional[str]:
 
     jable.tv is not supported by yt-dlp directly.  The video pages embed
     the stream URL in a JavaScript variable ``hlsUrl``.
+
+    Returns the m3u8 URL string, or ``None`` if extraction fails.
     """
     resp = requests.get(url, headers=_SESSION_HEADERS, timeout=20)
     resp.raise_for_status()
@@ -302,7 +304,6 @@ def resolve_jable_stream_url(url: str) -> Optional[str]:
 def download_gallery(
     url: str,
     output_dir: str,
-    progress_hook: Optional[Callable] = None,
 ) -> str:
     """Download images/gallery using gallery-dl Python API."""
     if not HAS_GALLERY_DL:
@@ -553,6 +554,11 @@ def _build_ui(page: ft.Page):
             page.launch_url(url_str.strip())
             show_snack("Opened in browser")
 
+    def _jable_title(url_str: str) -> str:
+        """Derive a human-readable title from a jable.tv URL slug."""
+        slug = url_str.rstrip("/").rsplit("/", 1)[-1]
+        return slug.replace("-", " ").title()
+
     def fetch_formats(url_str: str):
         if not url_str or not url_str.strip():
             show_snack("Please enter a URL", ft.Colors.ORANGE)
@@ -561,9 +567,7 @@ def _build_ui(page: ft.Page):
 
         # jable.tv: yt-dlp can't fetch info — go directly to download
         if is_jable_url(url_clean):
-            slug = url_clean.rstrip("/").rsplit("/", 1)[-1]
-            title = slug.replace("-", " ").title()
-            start_download(url_clean, title)
+            start_download(url_clean, _jable_title(url_clean))
             return
 
         def _run():
@@ -599,9 +603,7 @@ def _build_ui(page: ft.Page):
 
         # jable.tv: yt-dlp can't fetch info — go directly to download
         if is_jable_url(url_clean):
-            slug = url_clean.rstrip("/").rsplit("/", 1)[-1]
-            title = slug.replace("-", " ").title()
-            start_download(url_clean, title)
+            start_download(url_clean, _jable_title(url_clean))
             return
 
         def _run():
