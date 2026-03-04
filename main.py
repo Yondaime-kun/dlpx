@@ -651,7 +651,7 @@ def _build_ui(page: ft.Page):
                         ],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    padding=ft.Padding.only(top=40, bottom=20),
+                    padding=ft.Padding.only(top=16, bottom=20),
                     alignment=ft.Alignment.CENTER,
                 ),
                 ft.Container(
@@ -1035,7 +1035,7 @@ def _build_ui(page: ft.Page):
         on_change=_on_nav,
     )
 
-    page.add(body, nav_bar)
+    page.add(ft.SafeArea(body, expand=True), nav_bar)
     refresh_downloads()
 
 
